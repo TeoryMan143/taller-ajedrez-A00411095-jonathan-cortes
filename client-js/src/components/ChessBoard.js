@@ -80,7 +80,51 @@ export class ChessBoard {
      *        - Insertar el indicador dentro de la casilla.
      */
     render(gameState, selectedSquare, legalMoves = []) {
-        // TODO: Implementar el renderizado del tablero según la especificación de requerimientos de arriba.
+        if (!gameState || !gameState.board) {
+            return;
+        }
+
+        let lastFrom = null;
+        let lastTo = null;
+        if (gameState.moves && gameState.moves.length > 0) {
+            const lastMove = gameState.moves[gameState.moves.length - 1];
+            lastFrom = lastMove.fromPos;
+            lastTo = lastMove.toPos;
+        }
+
+        const samePos = (pos, r, c) => !!pos && pos.row === r && pos.col === c;
+        const moves = legalMoves || [];
+
+        for (let r = 0; r < 8; r++) {
+            for (let c = 0; c < 8; c++) {
+                const tile = this.tiles[r][c];
+                const piece = gameState.board[r] ? gameState.board[r][c] : null;
+
+                tile.className = `tile ${(r + c) % 2 === 0 ? "light" : "dark"}`;
+                tile.replaceChildren();
+
+                if (samePos(lastFrom, r, c) || samePos(lastTo, r, c)) {
+                    tile.classList.add("last-move");
+                }
+                if (samePos(selectedSquare, r, c)) {
+                    tile.classList.add("selected");
+                }
+
+                const hasPiece = !!(piece && piece.type && piece.type._name !== "PIECEEMPTY");
+                if (hasPiece) {
+                    const span = document.createElement("span");
+                    span.className = piece.color && piece.color._name === "COLORWHITE" ? "piece-white" : "piece-black";
+                    span.textContent = getPieceGlyph(piece);
+                    tile.appendChild(span);
+                }
+
+                if (moves.some((m) => samePos(m, r, c))) {
+                    const indicator = document.createElement("div");
+                    indicator.className = hasPiece ? "capture-ring" : "move-dot";
+                    tile.appendChild(indicator);
+                }
+            }
+        }
     }
 
     getElement() {

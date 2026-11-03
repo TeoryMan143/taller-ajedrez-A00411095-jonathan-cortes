@@ -110,6 +110,29 @@ Verifica el motor autoritativo de ajedrez y la concurrencia distribuida de salas
 
 ---
 
+## Cuestionario de Análisis Conceptual (Sección 4)
+
+### 1. Conexiones Bidireccionales (BiDir) vs. Callbacks Tradicionales
+El navegador no puede abrir puertos de escucha, así que el servidor no puede conectarse "de vuelta" al cliente web como sí lo hace con JavaFX.
+- **Cliente** (`chessRealtimeObserver.js`): crea un `ObjectAdapter` sin endpoints (`createObjectAdapter("")`), registra el servant `ChessObserver` con una identidad UUID y lo asocia a la conexión WebSocket ya abierta (`servicePrx.ice_getConnection().setAdapter(adapter)`). Así, lo que llegue del servidor por esa conexión se despacha a ese servant. El proxy enviado en `registerObserver` va sin endpoints.
+- **Servidor** (`ChessServiceImpl.registerObserver`): si el proxy no tiene endpoints (`ice_getEndpoints().length == 0`), `observer.ice_fixed(current.con)` lo amarra a la conexión entrante, de modo que los callbacks (`onGameStateChanged`, `onGameFinished`) viajan por el mismo WebSocket. Si tiene endpoints (JavaFX), se registra tal cual.
+
+### 2. Transporte TCP vs. WebSockets en ZeroC Ice
+`ChessServerApp` crea **un solo ObjectAdapter** con varios endpoints: `"default -p 10000:ws -h 0.0.0.0 -p 10002"`. Una única instancia de `ChessServiceImpl` se registra en ese adaptador con la identidad `ChessService`. Ice abstrae el transporte y entrega cada invocación al mismo servant sin importar si llegó por TCP o WS, por lo que la lógica (`RoomManager`, `GameRoom`, `ChessRules`) existe una sola vez y los observadores de ambos clientes comparten la misma sala.
+
+### 3. Empaquetado del Contrato con `slice2js`
+`ChessService.js` es una función autoejecutable que en el navegador recibe `window.Ice._require` como `require` y `window` como `exports`. Dentro usa `Ice._ModuleRegistry.module("ChessApp")`, define enums, structs, excepciones, `ChessServicePrx` y `ChessObserver` con `Ice.Slice`, y al final hace `exports.ChessApp = ChessApp`, es decir, `window.ChessApp`.
+
+`Ice.min.js` debe cargarse primero porque el archivo generado depende de `window.Ice` desde la primera línea (registro de módulos, `Slice.defineEnum`, clases base de proxies y servants). Por eso en `chessClientService.js` el orden es `import "../../lib/Ice.min.js"` y luego `import "./ChessService.js"`.
+
+### 4. Validación Autoritativa
+`chessRulesHelper.js` solo genera ayudas visuales (`move-dot`, `capture-ring`). El cliente no es confiable: su JS puede modificarse o se puede invocar `makeMove` directamente por Ice, y además conviven clientes distintos (JavaFX y Web) que deben obedecer las mismas reglas. Por eso `GameRoom.makeMove` (`synchronized`) vuelve a validar que la partida esté en curso, que sea el turno del jugador (`NotPlayerTurnException`), que el origen sea válido y del color correcto, y que el movimiento sea legal según `ChessRules` sin dejar al rey en jaque (`InvalidMoveException`). Solo entonces aplica la jugada y notifica a los observadores. El servidor es la única fuente de verdad y además evita condiciones de carrera.
+
+---
+
 ## Guía del Taller Académico
 El enunciado oficial y los criterios de evaluación detallados se encuentran disponibles en:
 - [Guía del Taller en PDF](docs/Taller_Ajedrez_Ice_JavaFX.pdf)
+
+- Jonathan David Cortés Castaño
+- A00411095
